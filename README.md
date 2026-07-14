@@ -1,221 +1,161 @@
-# T5-Lev: A Hybrid Framework for ASR Error Correction and Speech Translation
+# T5-Lev: Dynamic Error-Correction Enhanced Speech Translation
 
-> Improving Automatic Speech Recognition (ASR) outputs using Transformer-based text generation and Levenshtein Distance.
+> Undergraduate thesis project — Shanghai Normal University, School of Business
+> Author: Jinjia Yin (印晋佳) · Advisor: Liu Yuan · April 2025
+
+A joint optimization pipeline that corrects Automatic Speech Recognition (ASR)
+errors before they propagate into machine translation. The core contribution
+is **T5-Lev**, an error-correction module that combines a fine-tuned **T5**
+text-generation model with **Levenshtein-distance-based similarity scoring**
+to distinguish real ASR mistakes (misspellings, homophone confusions) from
+harmless variation, then repairs them — producing cleaner, more readable
+input for downstream translation.
 
 ## Overview
 
-Automatic Speech Recognition (ASR) systems often generate transcription errors due to accents, background noise, pronunciation variations, and speaking speed. These errors not only reduce transcription quality but also propagate into downstream machine translation systems.
-
-This project proposes **T5-Lev**, a hybrid post-processing framework that combines a **Transformer-based T5 model** with **Levenshtein Distance** to detect and correct ASR errors before machine translation.
-
-The framework improves transcription quality and provides cleaner input for downstream translation models.
-
----
-
-## Pipeline
+Speech recognition systems frequently produce errors due to accents,
+background noise, and speaking rate. These errors don't just hurt ASR
+readability — they compound and degrade the quality of any translation
+built on top of them. This project addresses that problem with a four-stage
+pipeline:
 
 ```
-Speech Audio
-      │
-      ▼
-Wav2Vec2 ASR
-      │
-      ▼
-Error Detection
-(Levenshtein Distance)
-      │
-      ▼
-T5 Error Correction
-      │
-      ▼
-MarianMT Translation
-      │
-      ▼
-Evaluation
-(CER, WER, METEOR)
+Audio → ASR (Wav2Vec2) → T5-Lev Error Correction → Translation (MarianMT) → Evaluation
 ```
 
----
+1. **ASR** — `facebook/wav2vec2-large-960h` transcribes English speech to text.
+2. **T5-Lev correction** — a fine-tuned T5 model rewrites the ASR output,
+   guided by a Levenshtein-similarity filter that flags likely real errors
+   (0.75 < similarity < 1, excluding simple suffix variants like `-ing`/`-ed`/`-s`)
+   so the model learns to fix genuine mistakes without over-correcting.
+3. **Translation** — `Helsinki-NLP/opus-mt-en-zh` (MarianMT) translates the
+   corrected English text into Chinese, with punctuation normalization.
+4. **Evaluation** — WER and CER measure ASR/correction quality; METEOR
+   measures translation quality (chosen over BLEU because it better handles
+   Chinese synonymy and flexible word order).
 
-## Features
+## Results
 
-- Automatic Speech Recognition using **Wav2Vec2**
-- Transformer-based text correction using **T5**
-- Similarity-based error detection with **Levenshtein Distance**
-- English → Chinese translation using **MarianMT**
-- End-to-end evaluation with multiple NLP metrics
+Evaluated on 2,910 test samples from the CoVoST (Common Voice-based Speech
+Translation) dataset:
 
----
+| Metric | Original ASR | After T5-Lev Correction | Improvement |
+|---|---|---|---|
+| WER  | 0.2955 | 0.1716 | **−41.2%** |
+| CER  | 0.0935 | 0.0746 | −20.2% |
+| METEOR (translation) | 0.4129 | 0.4461 | +8.0% |
 
-## Dataset
+Example correction:
 
-The project uses the **CoVoST 2** multilingual speech translation dataset.
-
-Each sample contains:
-
-- Speech audio
-- English transcription
-- Chinese translation
-
-For computational efficiency, approximately **1/20 of the original dataset** was used during experimentation.
-
----
-
-## Models
-
-| Module | Model |
-|---------|------|
-| ASR | facebook/wav2vec2-large-960h |
-| Error Correction | T5-base |
-| Machine Translation | Helsinki-NLP/opus-mt-en-zh |
-
----
-
-## Methodology
-
-### 1. Speech Recognition
-
-Speech signals are converted into English transcripts using the pre-trained Wav2Vec2 model.
-
-### 2. Error Detection
-
-Potential spelling errors are identified by comparing ASR outputs with reference transcripts using Levenshtein Distance.
-
-Only word pairs satisfying
-
-```
-0.75 < similarity < 1
-```
-
-are selected as correction candidates.
-
-### 3. Error Correction
-
-The detected ASR outputs are reformulated into a text-to-text generation task:
-
-```
-fix ASR errors:
-```
-
-The T5 model generates corrected sentences with improved spelling, punctuation, and readability.
-
-### 4. Machine Translation
-
-Corrected transcripts are translated into Chinese using MarianMT.
-
-### 5. Evaluation
-
-The framework is evaluated using:
-
-- Word Error Rate (WER)
-- Character Error Rate (CER)
-- METEOR
-
----
-
-## Experimental Results
-
-| Metric | Original ASR | Corrected ASR |
-|---------|-------------:|--------------:|
-| CER | 0.0935 | 0.0746 |
-| WER | 0.2955 | 0.1716 |
-| METEOR | 0.4129 | 0.4461 |
-
-The proposed framework achieved:
-
-- **41.2% reduction in Word Error Rate (WER)**
-- Lower Character Error Rate (CER)
-- Improved machine translation quality measured by METEOR
-
----
+| | Text |
+|---|---|
+| Original ASR | `there is only one ware to learn the alchemist answered` |
+| T5-Lev corrected | `"there is only one way to learn," the alchemist answered.` |
+| Reference | `"there is only one way to learn," the alchemist answered.` |
+| Translation METEOR | 0.0625 → **0.6310** |
 
 ## Repository Structure
 
 ```
 .
-├── notebook.ipynb
-├── code.py
 ├── README.md
-├── figures/
-│   ├── pipeline.png
-│   ├── architecture.png
-│   └── results.png
-├── requirements.txt
-└── data/
+├── notebook/
+│   └── asr_correction_translation_pipeline.ipynb   # full pipeline, runnable end-to-end
+├── thesis/
+│   └── thesis.pdf                                  # full write-up (methodology, related work, references)
+└── data/                                            # not included — see Dataset section
 ```
 
----
+## Dataset
 
-## Requirements
+Experiments use a 1/20 subset of **[CoVoST](https://github.com/facebookresearch/covost)**
+(English → Chinese), split 80/20 into train/test:
 
-- Python 3.10+
-- PyTorch
-- Transformers
-- Torchaudio
-- NLTK
-- Jieba
-- Levenshtein
-- Pandas
-- NumPy
+| Split | Duration (h) | Utterances | English words | Chinese chars |
+|---|---|---|---|---|
+| Train | 13.98 | 11,637 | 101,537 | 13,165 |
+| Test  | 3.53  | 2,910  | 25,662  | 3,315  |
 
-Install dependencies:
+The full dataset is not redistributed in this repo. Download it from the
+[CoVoST release page](https://github.com/facebookresearch/covost) and arrange
+it as:
+
+```
+data/
+├── train/{audio,transcripts,translations}/
+└── test/{audio,transcripts,translations}/
+```
+
+Each split expects `<name>.mp3` audio files paired with `<name>.txt`
+transcript and translation files sharing the same base filename.
+
+## Installation
 
 ```bash
+git clone https://github.com/<your-username>/t5-lev-asr-correction.git
+cd t5-lev-asr-correction
 pip install -r requirements.txt
 ```
 
----
-
-## Running the Project
-
-1. Download the CoVoST dataset.
-2. Configure the dataset paths.
-3. Run the notebook or Python script.
-
-```bash
-python code.py
+`requirements.txt`:
+```
+torch
+torchaudio
+transformers
+python-Levenshtein
+nltk
+jieba
 ```
 
-or
+## Usage
+
+Open `notebook/asr_correction_translation_pipeline.ipynb` in Jupyter and run
+the cells in order. Update the dataset paths in the "Load Training and Test
+Data" section to point at your local `data/train` and `data/test` folders,
+then run through training, correction, translation, and evaluation.
 
 ```bash
-jupyter notebook
+jupyter notebook notebook/asr_correction_translation_pipeline.ipynb
 ```
 
----
+## Method Summary
 
-## Future Improvements
+**Similarity filtering.** To avoid "false-positive" error pairs (e.g. tagging
+`there`→`the` as an error when both are valid words in other contexts), word
+pairs are only treated as correctable ASR errors when:
+- the ASR output and reference have the same word count for that utterance, and
+- their Levenshtein similarity falls strictly between 0.75 and 1.0, and
+- they aren't simple suffix variants (`-ing`, `-er`, `-ed`, `-s`).
 
-- Fine-tune larger language models (Flan-T5, UL2, Llama)
-- Support multilingual correction beyond English
-- Replace rule-based similarity filtering with neural error detection
-- Evaluate on larger speech translation benchmarks
-- Integrate Retrieval-Augmented Generation (RAG) for context-aware correction
+$$\text{similarity} = 1 - \frac{\text{Levenshtein distance}}{\max(\text{len}_1, \text{len}_2)}$$
 
----
+**Correction model.** `T5ForConditionalGeneration` (t5-base) is fine-tuned
+with the task prefix `"fix ASR errors: "`, using AdamW (lr = 3e-5), batch
+size 8, 10 epochs, gradient clipping at 1.0.
+
+**Evaluation metrics.** WER and CER (edit-distance-based) for ASR/correction
+quality; METEOR (with a fragmentation penalty, γ=0.5, β=3.0) for translation
+quality, using `jieba` for Chinese tokenization.
+
+## Limitations & Future Work
+
+- Trained on a small (1/20) subset of CoVoST due to compute constraints (CPU-only, 8GB RAM); results may not generalize to full-scale, noisier, or accented data.
+- Doesn't yet account for regional-accent variation present in the underlying dataset.
+- Future directions: scaling to the full dataset and additional language pairs, incorporating multi-task/reinforcement learning for longer and more complex sentences, and exploring dictionary-constrained correction to reduce dependence on reference transcripts.
 
 ## Citation
 
-If you find this project useful, please cite:
+If you use this work, please cite the thesis:
 
 ```
-Yin, J.
-T5-Lev: A Hybrid Framework for ASR Error Correction and Speech Translation.
-2025.
+Yin, J. (2025). Research on Joint Optimization Method for Speech Translation
+Based on Dynamic Error Correction Enhancement. Undergraduate thesis,
+Shanghai Normal University.
 ```
 
----
+## Acknowledgments
 
-## Author
-
-**Jinjia Yin**
-
-M.Sc. Student  
-Institut Polytechnique de Paris
-
-Research Interests:
-
-- Natural Language Processing
-- Speech Translation
-- Large Language Models
-- Machine Learning
+Thesis advisor: Liu Yuan, Shanghai Normal University, School of Business.
+Built on [Wav2Vec2](https://arxiv.org/abs/2006.11477),
+[T5](https://arxiv.org/abs/1910.10683), and
+[MarianMT](https://aclanthology.org/P18-4020/).
