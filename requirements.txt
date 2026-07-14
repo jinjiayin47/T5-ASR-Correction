@@ -1,0 +1,7 @@
+torch
+torchaudio
+transformers
+python-Levenshtein
+nltk
+jieba
+sentencepiece
